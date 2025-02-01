@@ -1,0 +1,8 @@
+[package]
+name = "geodesics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.27", features = ["derive"] }
+pars3d = { git = "https://github.com/JulianKnodt/pars3d", version = "0.1.0" }
