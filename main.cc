@@ -343,6 +343,11 @@ int main(int argc, char** argv)
                 auto e2 = edge_lengths[size_t(h2 / 2)];
                 auto e3 = edge_lengths[size_t(h3 / 2)];
 
+                auto v0 = halfedge_to_vertex[h1];
+                auto v1 = halfedge_to_vertex[h2];
+                auto v2 = halfedge_to_vertex[h3];
+                std::cout << v0 << " " << v1 << " " << v2 << " " << f_target << std::endl;
+
                 auto d1_sqr = halfedge_to_vertex_distance_sqr[size_t(h_source)];
                 auto d2_sqr = halfedge_to_vertex_distance_sqr[size_t(halfedge_to_prev[size_t(h_source)])];
                 assert(d1_sqr >= 0);
@@ -532,6 +537,7 @@ int main(int argc, char** argv)
         for (size_t v = 0; v < vertex_pos.size(); ++v)
             cout << min_vertex_dis[size_t(v)] * avg_edge_length << endl;
     }
+
 
     return 0;
 }

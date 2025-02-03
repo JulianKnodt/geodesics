@@ -11,6 +11,7 @@ pub fn main() {
     let mut mesh = scene.into_flattened_mesh();
     mesh.triangulate();
     assert!(args.src_idx < mesh.v.len(), "Source vertex out of bounds");
+
     let out_dists = geodesics(args.src_idx, &mesh.v, &mesh.f);
     assert_eq!(out_dists.len(), mesh.v.len());
 
