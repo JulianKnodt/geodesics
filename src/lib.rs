@@ -18,6 +18,10 @@ pub struct Args {
     /// Index of source vertex.
     #[arg(short, long, required = true)]
     pub src_idx: usize,
+
+    /// Path to colored PLY output.
+    #[arg(short, long, default_value = "out.ply")]
+    pub output: String,
 }
 
 pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
@@ -219,9 +223,27 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         std::mem::swap(&mut queue_from, &mut queue_to);
     }
 
-    let out_dists = vec![];
+    println!("{updates}");
+
+    let mut out_dists = vec![F::INFINITY; vs.len()];
     // for each edge, check face_to_extra_dist + vert_to_src_dist
     // also need to multiply by avg edge length
+    for (e, adj_fs) in edge_face_adj.iter() {
+      for &adj_f in adj_fs {
+        let sigma = face_to_extra_dist[adj_f];
+        for &v in e {
+          let dist = vert_to_src_dist[v].sqrt();
+          if !dist.is_finite() {
+            continue;
+          }
+          out_dists[v] = out_dists[v].min(sigma + dist);
+        }
+      }
+    }
+
+    for d in out_dists.iter_mut() {
+      *d *= avg_edge_len;
+    }
 
     out_dists
 }
