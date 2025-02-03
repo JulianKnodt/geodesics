@@ -3,3 +3,5 @@
 *.swp
 *.cpp
 *.obj
+build/
+cpp_bin
