@@ -356,6 +356,9 @@ int main(int argc, char** argv)
                 auto ref_d_t = face_to_center_distance[size_t(f_target)];
                 auto prev_sigma_t = face_to_extra_distance[size_t(f_source)];
 
+                std::cout << "e1, e2, e3 " << e1 << " " << e2 << " " << e3 << " d1 d2 " <<
+                d1_sqr << " " << d2_sqr << std::endl;
+
                 // Reconstruct points
                 auto px = (e1 * e1 + (e2 * e2 - e3 * e3)) / (e1 + e1);
                 auto py = sqrt_sat(e2 * e2 - px * px);
@@ -414,6 +417,7 @@ int main(int argc, char** argv)
 
                     // data-driven bending heuristic
                     {
+                        std::cout << px << " " << py << " " << cx << " " << cy << " " << sx << " " << sy_neg << std::endl;
                         static constexpr float threshold_c = 5.1424f;
                         static constexpr float threshold_g = 4.20638f;
                         static constexpr float threshold_h = 0.504201f;
@@ -423,10 +427,10 @@ int main(int argc, char** argv)
 
                         auto max_e = std::max(e1, std::max(e2, e3));
                         auto min_e = std::min(e1, std::min(e2, e3));
-                        auto tc = max_e;
-                        auto tg = max_e;
-                        auto th = py;
-                        auto thg = py;
+                        const auto tc = max_e;
+                        const auto tg = max_e;
+                        const auto th = py;
+                        const auto thg = py;
                         auto b0 = tc > threshold_c * e1;
                         auto b1 = tg > threshold_g * min_e;
                         auto b2 = th < threshold_h * e1;
@@ -439,9 +443,13 @@ int main(int argc, char** argv)
                         // intersection test
                         auto ttx = qx * sy_neg + sx * qy;
 
+
                         bend_left = ttx < 0;
                         bend_right = ttx > e1 * (qy + sy_neg);
                     }
+
+                    std::cout << "vert " << v0 << " " << v1 << " " << bend_left << bend_right <<
+                    std::endl;
 
                     // case: left out
                     if (bend_left)

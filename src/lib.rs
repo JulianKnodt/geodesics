@@ -26,6 +26,7 @@ pub struct Args {
 
 pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let src = vs[src_idx];
+    println!("{src:?}");
 
     let mut edge_len_sum = 0.;
     let mut num_edges = 0;
@@ -94,7 +95,8 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
             if v == src_idx || vert_to_src_dist[v].is_finite() {
                 continue;
             }
-            vert_to_src_dist[v] = dist_sq(src, vs[v]);
+            let dist = edge_lens[&minmax(src_idx, v)];
+            vert_to_src_dist[v] = sqr(dist);
         }
 
         queue_from.extend(
@@ -130,9 +132,9 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
             let e1 = edge_lens[&edge];
 
-            let d1_sqr = vert_to_src_dist[ei0];
+            let d1_sqr = vert_to_src_dist[ei1];
             assert!(d1_sqr.is_finite());
-            let d2_sqr = vert_to_src_dist[ei1];
+            let d2_sqr = vert_to_src_dist[ei0];
             assert!(d2_sqr.is_finite());
 
             let sx = (sqr(e1) + (d1_sqr - d2_sqr)) / (e1 + e1);
@@ -150,12 +152,13 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 let opp = other([v0, v1, v2], ei0, ei1);
                 println!("{ei0} {ei1} {opp} | {tgt_f}");
 
-                let eo_1 = minmax(ei0, opp);
-                let eo_2 = minmax(ei1, opp);
+                let eo_2 = minmax(ei0, opp);
+                let eo_1 = minmax(ei1, opp);
 
                 let e2 = edge_lens[&eo_1];
                 let e3 = edge_lens[&eo_2];
 
+                println!("e1, e2, e3, {e1} {e2} {e3}, d1 d2 {d1_sqr} {d2_sqr}");
                 let px = (sqr(e1) + sqr(e2) - sqr(e3)) / (e1 + e1);
                 let py = (sqr(e2) - sqr(px)).max(0.).sqrt();
 
@@ -171,6 +174,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 let mut h2_behind = false;
                 let mut h3_behind = false;
                 let (d_a, d_b, d_c, sigma_t, d_t) = if is_behind {
+                    todo!();
                     let dis1 = d_c_1 + d_s_1;
                     let dis2 = d_c_2 + d_s_2;
 
@@ -196,6 +200,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                         sx,
                         sy_neg,
                     );
+                    println!("vert {ei0} {ei1} {bend_left} {bend_right}");
 
                     if bend_left {
                         let sigma_t = prev_sigma_t + d_s_1;
@@ -224,8 +229,8 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                     face_to_extra_dist[tgt_f] = sigma_t;
 
                     vert_to_src_dist[ei0] = d_b;
-                    vert_to_src_dist[ei1] = d_a;
-                    vert_to_src_dist[opp] = d_c;
+                    vert_to_src_dist[opp] = d_a;
+                    vert_to_src_dist[ei1] = d_c;
 
                     let next_queue = if d_t < iters as F {
                         &mut queue_from
@@ -273,14 +278,17 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 pub fn data_driven_bending_heuristic(
     e_len: F,
     es: impl Iterator<Item = F>,
+
     px: F,
     py: F,
+
     cx: F,
     cy: F,
 
     sx: F,
     sy_neg: F,
 ) -> [bool; 2] {
+    println!("{px} {py} {cx} {cy} {sx} {sy_neg}");
     const THRESH_C: F = 5.1424;
     const THRESH_G: F = 4.20638;
     const THRESH_H: F = 0.504201;
@@ -324,6 +332,12 @@ pub fn sub<const N: usize>(a: [F; N], b: [F; N]) -> [F; N] {
 
 pub fn length_sq<const N: usize>(v: [F; N]) -> F {
     v.into_iter().map(|a| a * a).sum::<F>()
+}
+
+#[test]
+fn test_len_sq() {
+  assert_eq!(length_sq([1., 1., 1.]), 3.);
+  assert_eq!(dist_sq([1.; 3], [0.; 3]), 3.);
 }
 
 pub fn length<const N: usize>(v: [F; N]) -> F {

@@ -15,7 +15,7 @@ pub fn main() {
     let out_dists = geodesics(args.src_idx, &mesh.v, &mesh.f);
     assert_eq!(out_dists.len(), mesh.v.len());
 
-    let out_colors = vertex_scalar_coloring(&out_dists, magma, 0.1, [0., 0., 1.]);
+    let out_colors = vertex_scalar_coloring(&out_dists, magma, -1., [0., 0., 1.]);
     assert_eq!(out_colors.len(), mesh.v.len());
     mesh.vert_colors = out_colors;
     let out_scene = mesh.into_scene();
