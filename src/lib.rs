@@ -26,7 +26,6 @@ pub struct Args {
 
 pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let src = vs[src_idx];
-    println!("{src:?}");
 
     let mut edge_len_sum = 0.;
     let mut num_edges = 0;
@@ -76,7 +75,8 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
     let mut face_to_extra_dist = vec![0.; fs.len()];
     let mut face_to_center_dist = vec![F::INFINITY; fs.len()];
-    let mut vert_to_src_dist = vec![F::NEG_INFINITY; vs.len()];
+    // need to make vert to src dist per face
+    let mut vert_to_src_dist = vec![F::INFINITY; vs.len()];
     vert_to_src_dist[src_idx] = 0.;
 
     use std::collections::VecDeque;
@@ -110,13 +110,16 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     println!("TEMP REORDER");
     queue_from.make_contiguous().sort_unstable_by_key(|a| {
       match a.1 {
-        2 => 10,
-        4 => 5,
-        11 => 0,
-        10 => 7,
+        29 => 0,
+        32 => 1,
+        1 => 2,
+        27 => 3,
+        47 => 4,
         _ => todo!(),
       }
     });
+    //println!("{queue_from:?}");
+    //todo!();
 
     while !queue_from.is_empty() {
         iters += 1;
@@ -126,6 +129,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         while let Some(([ei0, ei1], src_f, is_behind)) = queue_from.pop_front() {
             assert!(face_to_center_dist[src_f].is_finite());
             assert!(face_to_extra_dist[src_f] >= 0.);
+            assert_eq!(fs[src_f].next(ei0), ei1);
             let edge = minmax(ei0, ei1);
 
             expansions += 1;
@@ -150,7 +154,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
                 let [v0, v1, v2] = fs[tgt_f].as_tri().expect("Only tris supported currently");
                 let opp = other([v0, v1, v2], ei0, ei1);
-                println!("{ei0} {ei1} {opp} | {tgt_f}");
+                println!("ei0, ei1, opp = {ei0} {ei1} {opp} | {tgt_f}");
 
                 let eo_2 = minmax(ei0, opp);
                 let eo_1 = minmax(ei1, opp);
@@ -174,7 +178,6 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 let mut h2_behind = false;
                 let mut h3_behind = false;
                 let (d_a, d_b, d_c, sigma_t, d_t) = if is_behind {
-                    todo!();
                     let dis1 = d_c_1 + d_s_1;
                     let dis2 = d_c_2 + d_s_2;
 
@@ -200,7 +203,6 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                         sx,
                         sy_neg,
                     );
-                    println!("vert {ei0} {ei1} {bend_left} {bend_right}");
 
                     if bend_left {
                         let sigma_t = prev_sigma_t + d_s_1;
@@ -223,26 +225,28 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 };
 
                 if d_t < face_to_center_dist[tgt_f] {
+                    println!("Updated! ({d_a} {d_b} {d_c})");
                     updates += 1;
 
                     face_to_center_dist[tgt_f] = d_t;
                     face_to_extra_dist[tgt_f] = sigma_t;
 
-                    vert_to_src_dist[ei0] = d_b;
-                    vert_to_src_dist[opp] = d_a;
-                    vert_to_src_dist[ei1] = d_c;
+                    vert_to_src_dist[ei0] = vert_to_src_dist[ei0].min(d_b);
+                    vert_to_src_dist[ei1] = vert_to_src_dist[ei1].min(d_a);
+                    vert_to_src_dist[opp] = vert_to_src_dist[opp].min(d_c);
 
-                    let next_queue = if d_t < iters as F {
+                    let next_queue = if d_t <= iters as F {
                         &mut queue_from
                     } else {
                         &mut queue_to
                     };
-                    next_queue.push_back((eo_1, tgt_f, h2_behind));
-                    next_queue.push_back((eo_2, tgt_f, h3_behind));
+                    next_queue.push_back(([opp, fs[tgt_f].next(opp)], tgt_f, h3_behind));
+                    next_queue.push_back(([fs[tgt_f].prev(opp), opp], tgt_f, h2_behind));
                 }
             }
         }
 
+        println!("SWAPPING");
         std::mem::swap(&mut queue_from, &mut queue_to);
     }
 

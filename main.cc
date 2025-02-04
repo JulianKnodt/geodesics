@@ -346,7 +346,7 @@ int main(int argc, char** argv)
                 auto v0 = halfedge_to_vertex[h1];
                 auto v1 = halfedge_to_vertex[h2];
                 auto v2 = halfedge_to_vertex[h3];
-                std::cout << v0 << " " << v1 << " " << v2 << " " << f_target << std::endl;
+                std::cout << v0 << " " << v1 << " " << v2 << " | " << f_target << std::endl;
 
                 auto d1_sqr = halfedge_to_vertex_distance_sqr[size_t(h_source)];
                 auto d2_sqr = halfedge_to_vertex_distance_sqr[size_t(halfedge_to_prev[size_t(h_source)])];
@@ -448,9 +448,6 @@ int main(int argc, char** argv)
                         bend_right = ttx > e1 * (qy + sy_neg);
                     }
 
-                    std::cout << "vert " << v0 << " " << v1 << " " << bend_left << bend_right <<
-                    std::endl;
-
                     // case: left out
                     if (bend_left)
                     {
@@ -495,6 +492,7 @@ int main(int argc, char** argv)
                 // Check if better
                 if (d_t < ref_d_t)
                 {
+                    std::cout << "Updated! (" << dA << " " << dB << " " << dC << ")" << std::endl;
                     ++updates;
 
                     face_to_center_distance[size_t(f_target)] = d_t;
@@ -513,6 +511,7 @@ int main(int argc, char** argv)
                 }
             }
 
+            std::cout << "SWAPPING" << std::endl;
             std::swap(queue_from, queue_to);
         }
 
