@@ -346,7 +346,6 @@ int main(int argc, char** argv)
                 auto v0 = halfedge_to_vertex[h1];
                 auto v1 = halfedge_to_vertex[h2];
                 auto v2 = halfedge_to_vertex[h3];
-                std::cout << v0 << " " << v1 << " " << v2 << " | " << f_target << std::endl;
 
                 auto d1_sqr = halfedge_to_vertex_distance_sqr[size_t(h_source)];
                 auto d2_sqr = halfedge_to_vertex_distance_sqr[size_t(halfedge_to_prev[size_t(h_source)])];
@@ -355,9 +354,6 @@ int main(int argc, char** argv)
 
                 auto ref_d_t = face_to_center_distance[size_t(f_target)];
                 auto prev_sigma_t = face_to_extra_distance[size_t(f_source)];
-
-                std::cout << "e1, e2, e3 " << e1 << " " << e2 << " " << e3 << " d1 d2 " <<
-                d1_sqr << " " << d2_sqr << std::endl;
 
                 // Reconstruct points
                 auto px = (e1 * e1 + (e2 * e2 - e3 * e3)) / (e1 + e1);
@@ -417,7 +413,6 @@ int main(int argc, char** argv)
 
                     // data-driven bending heuristic
                     {
-                        std::cout << px << " " << py << " " << cx << " " << cy << " " << sx << " " << sy_neg << std::endl;
                         static constexpr float threshold_c = 5.1424f;
                         static constexpr float threshold_g = 4.20638f;
                         static constexpr float threshold_h = 0.504201f;
@@ -492,7 +487,6 @@ int main(int argc, char** argv)
                 // Check if better
                 if (d_t < ref_d_t)
                 {
-                    std::cout << "Updated! (" << dA << " " << dB << " " << dC << ")" << std::endl;
                     ++updates;
 
                     face_to_center_distance[size_t(f_target)] = d_t;
@@ -511,7 +505,6 @@ int main(int argc, char** argv)
                 }
             }
 
-            std::cout << "SWAPPING" << std::endl;
             std::swap(queue_from, queue_to);
         }
 
