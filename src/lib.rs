@@ -24,6 +24,24 @@ pub struct Args {
     pub output: String,
 }
 
+/*
+enum EdgeFaceAdj {
+  Boundary,
+  Manifold(usize),
+  NonManifold(Vec<usize>)
+}
+
+impl EdgeFaceAdj {
+  pub fn as_slice(&self) -> &[usize] {
+    match self {
+      Self::Boundary => &[],
+      Self::Manifold(v) => std::slice::from_ref(v),
+      Self::NonManifold(a) => a.as_slice(),
+    }
+  }
+}
+*/
+
 pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let src = vs[src_idx];
 
@@ -35,6 +53,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let mut edge_face_adj: HashMap<[usize; 2], Vec<usize>> = HashMap::new();
     let mut vert_adjs: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut edge_lens: HashMap<[usize; 2], F> = HashMap::new();
+    let mut face_edge_lens: Vec<[F; 3]> = vec![[0.; 3]; fs.len()];
 
     let mut vert_face_adj: Vec<Vec<usize>> = vec![vec![]; vs.len()];
 
@@ -46,6 +65,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         for i in 0..f.len() {
             let n = (i + 1) % f.len();
             let edge_len = dist(vs[f[i]], vs[f[n]]);
+            face_edge_lens[fi][i] = edge_len;
 
             let e = minmax(f[i], f[n]);
             match edge_face_adj.entry(e) {
@@ -71,6 +91,11 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     for el in edge_lens.values_mut() {
         *el *= inv_avg_edge_len;
     }
+    for els in face_edge_lens.iter_mut() {
+        for el in els.iter_mut() {
+            *el *= inv_avg_edge_len;
+        }
+    }
 
     let mut iters = 0;
     let mut updates = 0;
@@ -78,14 +103,16 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
     let mut face_to_extra_dist = vec![0.; fs.len()];
     let mut face_to_center_dist = vec![F::INFINITY; fs.len()];
-    let mut vert_to_src_dist: HashMap<(usize, usize), F> = HashMap::new();
+    use std::collections::BTreeMap;
+    let mut vert_to_src_dist: BTreeMap<(usize, usize), F> = BTreeMap::new();
 
     use std::collections::VecDeque;
     let mut queue_from = VecDeque::new();
     let mut queue_to = VecDeque::new();
 
     for &adj_face in &vert_face_adj[src_idx] {
-        let f = fs[adj_face].as_slice();
+        let fk = &fs[adj_face];
+        let f = fk.as_slice();
         assert!(f.contains(&src_idx));
         let centroid = f.iter().fold([0.; 3], |acc, &vi| add(acc, vs[vi]));
 
@@ -93,19 +120,18 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         face_to_center_dist[adj_face] = dist(centroid, src);
         vert_to_src_dist.insert((adj_face, src_idx), 0.);
 
-        for &v in f {
+        for (vi, &v) in f.iter().enumerate() {
             if v == src_idx {
                 continue;
             }
-            let dist = edge_lens[&minmax(src_idx, v)];
+            let dist = face_edge_lens[adj_face][vi];
             let prev = vert_to_src_dist.insert((adj_face, v), sqr(dist));
-            assert_eq!(prev, None);
+            debug_assert_eq!(prev, None);
         }
 
         queue_from.extend(
-            fs[adj_face]
-                .edges()
-                .filter(|e| !e.contains(&src_idx))
+            fk.edge_idxs()
+                .filter(|&[e0, e1]| f[e0] != src_idx && f[e1] != src_idx)
                 .map(|e| (e, adj_face, false)),
         );
     }
@@ -115,15 +141,18 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
         queue_to.clear();
 
-        while let Some(([ei0, ei1], src_f, is_behind)) = queue_from.pop_front() {
+        while let Some(([eii0, eii1], src_f, is_behind)) = queue_from.pop_front() {
             debug_assert!(face_to_center_dist[src_f].is_finite());
             debug_assert!(face_to_extra_dist[src_f] >= 0.);
+            let ei0 = fs[src_f].as_slice()[eii0];
+            let ei1 = fs[src_f].as_slice()[eii1];
             debug_assert_eq!(fs[src_f].next(ei0), ei1);
+
             let edge = minmax(ei0, ei1);
 
             expansions += 1;
 
-            let e1 = edge_lens[&edge];
+            let e1 = face_edge_lens[src_f][eii0];
 
             let d1_sqr = *vert_to_src_dist.get(&(src_f, ei1)).unwrap();
             debug_assert!(d1_sqr.is_finite());
@@ -144,13 +173,17 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 let Some([v0, v1, v2]) = fs[tgt_f].as_tri() else {
                     continue;
                 };
-                let opp = other([v0, v1, v2], ei0, ei1);
+                let opp_i = other_i([v0, v1, v2], ei0, ei1);
+                let opp = fs[tgt_f].as_slice()[opp_i];
 
-                let eo_2 = minmax(ei0, opp);
-                let eo_1 = minmax(ei1, opp);
+                //let eo_2 = minmax(ei0, opp);
+                //let eo_3 = minmax(ei1, opp);
 
-                let e2 = edge_lens[&eo_1];
-                let e3 = edge_lens[&eo_2];
+                //let e2 = edge_lens[&eo_1];
+                let e2 = face_edge_lens[tgt_f][opp_i];
+                //assert_eq!(e2, face_edge_lens[tgt_f][opp_i]);
+                //let e3 = edge_lens[&eo_2];
+                let e3 = face_edge_lens[tgt_f][opp_i.checked_sub(1).unwrap_or(2)];
 
                 let px = (sqr(e1) + sqr(e2) - sqr(e3)) / (e1 + e1);
                 let py = (sqr(e2) - sqr(px)).max(0.).sqrt();
@@ -180,10 +213,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 } else {
                     let [bend_left, bend_right] = data_driven_bending_heuristic(
                         e1,
-                        fs[tgt_f]
-                            .edges()
-                            .map(|[a, b]| minmax(a, b))
-                            .map(|e| edge_lens[&e]),
+                        &[e1, e2, e3],
                         px,
                         py,
                         cx,
@@ -227,8 +257,9 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                     } else {
                         &mut queue_to
                     };
-                    next_queue.push_back(([opp, fs[tgt_f].next(opp)], tgt_f, h3_behind));
-                    next_queue.push_back(([fs[tgt_f].prev(opp), opp], tgt_f, h2_behind));
+                    next_queue.push_back(([opp_i, (opp_i + 1) % 3], tgt_f, h3_behind));
+                    let p = opp_i.checked_sub(1).unwrap_or(2);
+                    next_queue.push_back(([p, opp_i], tgt_f, h2_behind));
                 }
             }
         }
@@ -261,7 +292,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
 pub fn data_driven_bending_heuristic(
     e_len: F,
-    es: impl Iterator<Item = F>,
+    es: &[F],
 
     px: F,
     py: F,
@@ -281,9 +312,11 @@ pub fn data_driven_bending_heuristic(
         0.726262, 0.0635997, 0.0515979, 0.56903, 0.0447586, 0.0612103, 0.718198,
     ];
 
-    let [max_e, min_e] = es.fold([F::INFINITY, F::NEG_INFINITY], |[l, h], n| {
-        [l.min(n), h.max(n)]
-    });
+    let [max_e, min_e] = es
+        .iter()
+        .fold([F::INFINITY, F::NEG_INFINITY], |[l, h], &n| {
+            [l.min(n), h.max(n)]
+        });
 
     let b0 = max_e > THRESH_C * e_len;
     let b1 = max_e > THRESH_G * min_e;
@@ -292,7 +325,7 @@ pub fn data_driven_bending_heuristic(
     let b3 = py < THRESH_HG * max_e;
 
     let idx = b0 as usize + (b1 as usize * 2) + (b2 as usize * 4) + (b3 as usize * 8);
-    let l = LAMBDA[idx];
+    let l = unsafe { LAMBDA.get_unchecked(idx) };
 
     let qx = px * (1. - l) + cx * l;
     let qy = py * (1. - l) + cy * l;
@@ -317,12 +350,6 @@ pub fn length_sq<const N: usize>(v: [F; N]) -> F {
     v.into_iter().map(|a| a * a).sum::<F>()
 }
 
-#[test]
-fn test_len_sq() {
-    assert_eq!(length_sq([1., 1., 1.]), 3.);
-    assert_eq!(dist_sq([1.; 3], [0.; 3]), 3.);
-}
-
 pub fn length<const N: usize>(v: [F; N]) -> F {
     length_sq(v).sqrt()
 }
@@ -335,13 +362,19 @@ pub fn dist_sq<const N: usize>(a: [F; N], b: [F; N]) -> F {
     length_sq(sub(a, b))
 }
 
-pub fn other(v: [usize; 3], e0: usize, e1: usize) -> usize {
+pub fn other(v: [usize; 3], e0: usize, e1: usize) -> (usize, [usize; 2]) {
     match v {
-        [a, b, c] | [c, a, b] | [b, c, a] | [a, c, b] | [b, a, c] | [c, b, a]
-            if b == e0 && c == e1 =>
-        {
-            a
-        }
+        [a, b, c] | [c, a, b] | [b, c, a] if b == e0 && c == e1 => (a, [b, c]),
+        [a, c, b] | [b, a, c] | [c, b, a] if b == e0 && c == e1 => (a, [c, b]),
+        _ => unreachable!(),
+    }
+}
+
+pub fn other_i(v: [usize; 3], e0: usize, e1: usize) -> usize {
+    match v {
+        [_, b, c] | [_, c, b] if b == e0 && c == e1 => 0,
+        [b, _, c] | [c, _, b] if b == e0 && c == e1 => 1,
+        [b, c, _] | [c, b, _] if b == e0 && c == e1 => 2,
         _ => unreachable!(),
     }
 }
