@@ -125,7 +125,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         queue_from.extend(
             fk.edge_idxs()
                 .filter(|&[e0, e1]| f[e0] != src_idx && f[e1] != src_idx)
-                .map(|e| (e, adj_face, false)),
+                .map(|e| (adj_face, e.map(|v| v as u8), false)),
         );
     }
 
@@ -134,7 +134,9 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
         queue_to.clear();
 
-        while let Some(([eii0, eii1], src_f, is_behind)) = queue_from.pop_front() {
+        while let Some((src_f, [eii0, eii1], is_behind)) = queue_from.pop_front() {
+            let eii0 = eii0 as usize;
+            let eii1 = eii1 as usize;
             debug_assert!(face_to_center_dist[src_f].is_finite());
             debug_assert!(face_to_extra_dist[src_f] >= 0.);
             let ei0 = fs[src_f].as_slice()[eii0];
@@ -244,8 +246,8 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                     } else {
                         &mut queue_to
                     };
-                    next_queue.push_back(([opp_i, next_i], tgt_f, h3_behind));
-                    next_queue.push_back(([prev_i, opp_i], tgt_f, h2_behind));
+                    next_queue.push_back((tgt_f, [opp_i as u8, next_i as u8], h3_behind));
+                    next_queue.push_back((tgt_f, [prev_i as u8, opp_i as u8], h2_behind));
                 }
             }
         }
