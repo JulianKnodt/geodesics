@@ -52,7 +52,6 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
     let mut edge_face_adj: HashMap<[usize; 2], Vec<usize>> = HashMap::new();
     let mut vert_adjs: HashMap<usize, Vec<usize>> = HashMap::new();
-    let mut edge_lens: HashMap<[usize; 2], F> = HashMap::new();
     let mut face_edge_lens: Vec<[F; 3]> = vec![[0.; 3]; fs.len()];
 
     let mut vert_face_adj: Vec<Vec<usize>> = vec![vec![]; vs.len()];
@@ -75,7 +74,6 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                 Entry::Vacant(v) => {
                     edge_len_sum += edge_len;
                     num_edges += 1;
-                    edge_lens.insert(e, edge_len);
                     v.insert(vec![fi]);
 
                     vert_adjs.entry(i).or_default().push(n);
@@ -88,9 +86,6 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let avg_edge_len = edge_len_sum / num_edges as F;
     let inv_avg_edge_len = avg_edge_len.recip();
 
-    for el in edge_lens.values_mut() {
-        *el *= inv_avg_edge_len;
-    }
     for els in face_edge_lens.iter_mut() {
         for el in els.iter_mut() {
             *el *= inv_avg_edge_len;
@@ -103,8 +98,7 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
 
     let mut face_to_extra_dist = vec![0.; fs.len()];
     let mut face_to_center_dist = vec![F::INFINITY; fs.len()];
-    use std::collections::BTreeMap;
-    let mut vert_to_src_dist: BTreeMap<(usize, usize), F> = BTreeMap::new();
+    let mut vert_to_src_dist: Vec<[F; 3]> = vec![[F::INFINITY; 3]; fs.len()];
 
     use std::collections::VecDeque;
     let mut queue_from = VecDeque::new();
@@ -116,17 +110,16 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
         assert!(f.contains(&src_idx));
         let centroid = f.iter().fold([0.; 3], |acc, &vi| add(acc, vs[vi]));
 
-        face_to_extra_dist[adj_face] = 0.;
         face_to_center_dist[adj_face] = dist(centroid, src);
-        vert_to_src_dist.insert((adj_face, src_idx), 0.);
+        let si = f.iter().position(|&i| i == src_idx).unwrap();
+        vert_to_src_dist[adj_face][si] = 0.;
 
         for (vi, &v) in f.iter().enumerate() {
             if v == src_idx {
                 continue;
             }
             let dist = face_edge_lens[adj_face][vi];
-            let prev = vert_to_src_dist.insert((adj_face, v), sqr(dist));
-            debug_assert_eq!(prev, None);
+            vert_to_src_dist[adj_face][vi] = sqr(dist);
         }
 
         queue_from.extend(
@@ -148,15 +141,13 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
             let ei1 = fs[src_f].as_slice()[eii1];
             debug_assert_eq!(fs[src_f].next(ei0), ei1);
 
-            let edge = minmax(ei0, ei1);
-
             expansions += 1;
 
             let e1 = face_edge_lens[src_f][eii0];
 
-            let d1_sqr = *vert_to_src_dist.get(&(src_f, ei1)).unwrap();
+            let d1_sqr = vert_to_src_dist[src_f][eii1];
             debug_assert!(d1_sqr.is_finite());
-            let d2_sqr = *vert_to_src_dist.get(&(src_f, ei0)).unwrap();
+            let d2_sqr = vert_to_src_dist[src_f][eii0];
             debug_assert!(d2_sqr.is_finite());
 
             let sx = (sqr(e1) + (d1_sqr - d2_sqr)) / (e1 + e1);
@@ -165,25 +156,21 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
             let prev_sigma_t = face_to_extra_dist[src_f];
 
             // for each adjacent face to this edge propagate distances
-            for &tgt_f in &edge_face_adj[&edge] {
+            for &tgt_f in &edge_face_adj[&minmax(ei0, ei1)] {
                 if tgt_f == src_f {
                     continue;
                 }
+                assert!(tgt_f < face_edge_lens.len());
 
                 let Some([v0, v1, v2]) = fs[tgt_f].as_tri() else {
                     continue;
                 };
                 let opp_i = other_i([v0, v1, v2], ei0, ei1);
-                let opp = fs[tgt_f].as_slice()[opp_i];
 
-                //let eo_2 = minmax(ei0, opp);
-                //let eo_3 = minmax(ei1, opp);
-
-                //let e2 = edge_lens[&eo_1];
                 let e2 = face_edge_lens[tgt_f][opp_i];
-                //assert_eq!(e2, face_edge_lens[tgt_f][opp_i]);
-                //let e3 = edge_lens[&eo_2];
-                let e3 = face_edge_lens[tgt_f][opp_i.checked_sub(1).unwrap_or(2)];
+                let prev_i = opp_i.checked_sub(1).unwrap_or(2);
+                let e3 = face_edge_lens[tgt_f][prev_i];
+                let next_i = (opp_i + 1) % 3;
 
                 let px = (sqr(e1) + sqr(e2) - sqr(e3)) / (e1 + e1);
                 let py = (sqr(e2) - sqr(px)).max(0.).sqrt();
@@ -248,18 +235,17 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
                     face_to_center_dist[tgt_f] = d_t;
                     face_to_extra_dist[tgt_f] = sigma_t;
 
-                    vert_to_src_dist.insert((tgt_f, ei0), d_b);
-                    vert_to_src_dist.insert((tgt_f, ei1), d_a);
-                    vert_to_src_dist.insert((tgt_f, opp), d_c);
+                    vert_to_src_dist[tgt_f][opp_i] = d_c;
+                    vert_to_src_dist[tgt_f][next_i] = d_a;
+                    vert_to_src_dist[tgt_f][prev_i] = d_b;
 
                     let next_queue = if d_t <= iters as F {
                         &mut queue_from
                     } else {
                         &mut queue_to
                     };
-                    next_queue.push_back(([opp_i, (opp_i + 1) % 3], tgt_f, h3_behind));
-                    let p = opp_i.checked_sub(1).unwrap_or(2);
-                    next_queue.push_back(([p, opp_i], tgt_f, h2_behind));
+                    next_queue.push_back(([opp_i, next_i], tgt_f, h3_behind));
+                    next_queue.push_back(([prev_i, opp_i], tgt_f, h2_behind));
                 }
             }
         }
@@ -275,12 +261,15 @@ pub fn geodesics(src_idx: usize, vs: &[[F; 3]], fs: &[FaceKind]) -> Vec<F> {
     let mut out_dists = vec![F::INFINITY; vs.len()];
     // for each edge, check face_to_extra_dist + vert_to_src_dist
     // also need to multiply by avg edge length
-    for (&(f, vi), dist) in vert_to_src_dist.iter() {
-        if !dist.is_finite() {
-            continue;
+    for (fi, dists) in vert_to_src_dist.iter().enumerate() {
+        for (vi, &dist) in dists.iter().enumerate() {
+          if !dist.is_finite() {
+              continue;
+          }
+          let sigma = face_to_extra_dist[fi];
+          let vi = fs[fi].as_slice()[vi];
+          out_dists[vi] = out_dists[vi].min(sigma + dist.sqrt());
         }
-        let sigma = face_to_extra_dist[f];
-        out_dists[vi] = out_dists[vi].min(sigma + dist.sqrt());
     }
 
     for d in out_dists.iter_mut() {
